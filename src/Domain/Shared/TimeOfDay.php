@@ -7,10 +7,11 @@ namespace GigEconomics\Domain\Shared;
 use DateTimeInterface;
 
 /**
- * Time-of-day bands used for fuel and earnings analytics.
+ * Time-of-day bands used for energy and earnings analytics.
  *
- * Boundaries follow the analytics rule documented in the source workbook:
- * dawn 00:00–05:59, morning 06:00–11:59, afternoon 12:00–17:59, night 18:00–23:59.
+ * Four fixed bands are used so any log can be compared on a like-for-like
+ * basis: dawn 00:00–05:59, morning 06:00–11:59, afternoon 12:00–17:59 and
+ * night 18:00–23:59.
  */
 enum TimeOfDay: string
 {
