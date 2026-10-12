@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-use GigEconomics\Domain\Fuel\FuelLog;
-use GigEconomics\Domain\Fuel\FuelPrice;
-use GigEconomics\Domain\Fuel\FuelPurchase;
+use GigEconomics\Domain\Energy\EnergyLog;
+use GigEconomics\Domain\Energy\EnergyPrice;
+use GigEconomics\Domain\Energy\EnergyPurchase;
 use GigEconomics\Domain\Quality\DataQualityAnalyzer;
 use GigEconomics\Domain\Quality\DataQualityIssueType;
 use GigEconomics\Domain\Quality\Severity;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyQuantity;
 
-function purchase(?int $odometer, string $gallons = '5'): FuelPurchase
+function purchase(?int $odometer, string $gallons = '5'): EnergyPurchase
 {
-    return FuelPurchase::create(FuelVolume::ofGallons($gallons), FuelPrice::perGallon('4.00'), null, 'RUC', 'Vendor', $odometer);
+    return EnergyPurchase::create(EnergyQuantity::ofGallons($gallons), EnergyPrice::perGallon('4.00'), null, 'RUC', 'Vendor', $odometer);
 }
 
 it('flags records without a date as warnings', function (): void {
-    $analyzer = new DataQualityAnalyzer(FuelLog::fromPurchases([purchase(1000)]));
+    $analyzer = new DataQualityAnalyzer(EnergyLog::fromPurchases([purchase(1000)]));
 
     $types = array_map(static fn ($issue): string => $issue->type->value, $analyzer->issues());
 
@@ -24,18 +24,18 @@ it('flags records without a date as warnings', function (): void {
 });
 
 it('flags missing odometer readings as informational', function (): void {
-    $analyzer = new DataQualityAnalyzer(FuelLog::fromPurchases([purchase(null)]));
+    $analyzer = new DataQualityAnalyzer(EnergyLog::fromPurchases([purchase(null)]));
 
     expect($analyzer->issuesOf(Severity::Info))->not->toBeEmpty();
 });
 
-it('flags a zero volume as an error', function (): void {
-    $analyzer = new DataQualityAnalyzer(FuelLog::fromPurchases([purchase(1000, '0')]));
+it('flags a zero energy amount as an error', function (): void {
+    $analyzer = new DataQualityAnalyzer(EnergyLog::fromPurchases([purchase(1000, '0')]));
 
     expect($analyzer->hasErrors())->toBeTrue();
 });
 
-it('detects statistical outliers among efficiency readings', function (): void {
+it('detects statistical outliers among economy readings', function (): void {
     $purchases = [];
     $odometer = 10000;
 
@@ -48,16 +48,16 @@ it('detects statistical outliers among efficiency readings', function (): void {
     $purchases[] = purchase($odometer, '1'); // 500 km on 1 gallon -> outlier
     $purchases[] = purchase($odometer + 500, '10');
 
-    $analyzer = new DataQualityAnalyzer(FuelLog::fromPurchases($purchases));
+    $analyzer = new DataQualityAnalyzer(EnergyLog::fromPurchases($purchases));
 
-    expect($analyzer->outlierEfficiencies())->not->toBeEmpty();
+    expect($analyzer->outlierEconomies())->not->toBeEmpty();
 });
 
 it('scores a clean log higher than a dirty one', function (): void {
-    $clean = new DataQualityAnalyzer(FuelLog::fromPurchases([
-        FuelPurchase::create(
-            FuelVolume::ofGallons('5'),
-            FuelPrice::perGallon('4.00'),
+    $clean = new DataQualityAnalyzer(EnergyLog::fromPurchases([
+        EnergyPurchase::create(
+            EnergyQuantity::ofGallons('5'),
+            EnergyPrice::perGallon('4.00'),
             new DateTimeImmutable('2026-04-01 10:00:00'),
             'RUC',
             'Vendor',
@@ -65,7 +65,7 @@ it('scores a clean log higher than a dirty one', function (): void {
         ),
     ]));
 
-    $dirty = new DataQualityAnalyzer(FuelLog::fromPurchases([purchase(null, '0')]));
+    $dirty = new DataQualityAnalyzer(EnergyLog::fromPurchases([purchase(null, '0')]));
 
     expect($clean->qualityScore()->toFloat())->toBeGreaterThan($dirty->qualityScore()->toFloat());
 });
