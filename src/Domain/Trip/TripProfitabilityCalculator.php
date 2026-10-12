@@ -10,7 +10,7 @@ use GigEconomics\Domain\Money\Currency;
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Money\Percentage;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelEfficiency;
+use GigEconomics\Domain\Shared\EnergyEconomy;
 use GigEconomics\Domain\Shared\Platform;
 
 /**
@@ -46,20 +46,20 @@ final class TripProfitabilityCalculator
             : $billableDistance->plus($deadheadDistance);
 
         $commission = $fare->commission($profile->commissionRate);
-        $fuelCost = $profile->fuelCostFor($totalDistance);
+        $energyCost = $profile->energyCostFor($totalDistance);
         $depreciation = $profile->depreciationFor($totalDistance);
         $otherCosts = $profile->fixedCostPerTrip;
 
         $netProfit = $fare->grossAmount
             ->minus($commission)
-            ->minus($fuelCost)
+            ->minus($energyCost)
             ->minus($depreciation)
             ->minus($otherCosts);
 
         $breakdown = new TripCostBreakdown(
             grossFare: $fare->grossAmount,
             platformCommission: $commission,
-            fuelCost: $fuelCost,
+            energyCost: $energyCost,
             depreciationCost: $depreciation,
             otherCosts: $otherCosts,
             netProfit: $netProfit,
@@ -97,7 +97,7 @@ final class TripProfitabilityCalculator
     ): Money {
         $currency ??= $profile->currency();
 
-        $costs = $profile->fuelCostFor($distance)
+        $costs = $profile->energyCostFor($distance)
             ->plus($profile->depreciationFor($distance))
             ->plus($profile->fixedCostPerTrip);
 
@@ -125,24 +125,25 @@ final class TripProfitabilityCalculator
     }
 
     /**
-     * Effective fuel cost per kilometre implied by a profile.
+     * Effective energy cost per kilometre implied by a profile.
      */
-    public function fuelCostPerKilometre(TripCostProfile $profile): Money
+    public function energyCostPerKilometre(TripCostProfile $profile): Money
     {
-        return $profile->fuelCostFor(Distance::ofKilometres(1));
+        return $profile->energyCostFor(Distance::ofKilometres(1));
     }
 
     /**
-     * Effective fuel efficiency expressed as money per kilometre, given a
-     * weighted fuel price and a real efficiency reading.
+     * Effective energy cost expressed as money per kilometre, given a weighted
+     * energy price and a real economy reading. The price and the economy must
+     * share a unit (per gallon, per litre or per kWh).
      */
-    public function fuelCostPerKilometreFrom(Money $weightedPricePerGallon, FuelEfficiency $efficiency): Money
+    public function energyCostPerKilometreFrom(Money $weightedPricePerUnit, EnergyEconomy $economy): Money
     {
-        if (! $efficiency->isUsable()) {
-            return Money::zero($weightedPricePerGallon->currency);
+        if (! $economy->isUsable()) {
+            return Money::zero($weightedPricePerUnit->currency);
         }
 
-        return $weightedPricePerGallon->dividedBy($efficiency->kilometresPerGallon(), 6);
+        return $weightedPricePerUnit->dividedBy($economy->kilometresPerUnit(), 6);
     }
 
     /**

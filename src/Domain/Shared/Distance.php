@@ -63,7 +63,7 @@ final class Distance implements JsonSerializable, Stringable
             : self::parse($volume);
 
         if ($divisor->isZero()) {
-            throw InvalidDomainValueException::divisionByZero('fuel efficiency');
+            throw InvalidDomainValueException::divisionByZero('energy economy');
         }
 
         return $this->kilometres->dividedBy($divisor, $scale, BrickRoundingMode::HALF_UP);

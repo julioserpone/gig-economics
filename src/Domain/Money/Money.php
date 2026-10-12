@@ -72,8 +72,8 @@ final class Money implements JsonSerializable, Stringable
     }
 
     /**
-     * Ratio of two amounts, e.g. the volume-weighted fuel price
-     * SUM(Monto) / SUM(Galones).
+     * Ratio of two amounts, e.g. the weighted energy price (total spend divided
+     * by total energy).
      */
     public function divideBy(self $divisor, int $scale = 6): BigDecimal
     {

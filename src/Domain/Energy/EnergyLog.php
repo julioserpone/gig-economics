@@ -2,31 +2,32 @@
 
 declare(strict_types=1);
 
-namespace GigEconomics\Domain\Fuel;
+namespace GigEconomics\Domain\Energy;
 
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelEfficiency;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyEconomy;
+use GigEconomics\Domain\Shared\EnergyQuantity;
+use GigEconomics\Domain\Shared\EnergyUnit;
 use GigEconomics\Exceptions\InvalidDomainValueException;
 
 /**
- * Ordered collection of refuelling events for one vehicle.
+ * Ordered collection of replenishment events for one vehicle.
  *
- * Reproduces the workbook's window logic:
- *  - `Km Recorridos` = current odometer reading minus the previous reading;
- *  - `Km/Galón`      = travelled distance divided by the current volume.
+ * Works identically for combustion and electric vehicles: distance is the
+ * difference between consecutive meter readings, and economy is that distance
+ * divided by the energy taken on board at the later reading.
  *
  * Purchases without an odometer reading are kept (they still carry cost and
- * volume) but yield no distance, exactly like the source table.
+ * energy) but yield no distance.
  */
-final class FuelLog
+final class EnergyLog
 {
-    /** @var array<int, FuelPurchase> */
+    /** @var array<int, EnergyPurchase> */
     private array $purchases;
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
     private function __construct(array $purchases)
     {
@@ -34,14 +35,14 @@ final class FuelLog
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
     public static function fromPurchases(array $purchases): self
     {
         return new self($purchases);
     }
 
-    public function add(FuelPurchase $purchase): self
+    public function add(EnergyPurchase $purchase): self
     {
         return new self([...$this->purchases, $purchase]);
     }
@@ -49,13 +50,13 @@ final class FuelLog
     /**
      * Purchases ordered chronologically by odometer, then by date.
      *
-     * @return array<int, FuelPurchase>
+     * @return array<int, EnergyPurchase>
      */
     public function chronologically(): array
     {
         $ordered = $this->purchases;
 
-        usort($ordered, static function (FuelPurchase $a, FuelPurchase $b): int {
+        usort($ordered, static function (EnergyPurchase $a, EnergyPurchase $b): int {
             $odometerComparison = ($a->odometer ?? PHP_INT_MAX) <=> ($b->odometer ?? PHP_INT_MAX);
 
             if ($odometerComparison !== 0) {
@@ -69,7 +70,7 @@ final class FuelLog
     }
 
     /**
-     * @return array<int, FuelPurchase>
+     * @return array<int, EnergyPurchase>
      */
     public function all(): array
     {
@@ -91,10 +92,7 @@ final class FuelLog
      */
     public function travelledDistances(): array
     {
-        $withOdometer = array_values(array_filter(
-            $this->chronologically(),
-            static fn (FuelPurchase $purchase): bool => $purchase->hasOdometer(),
-        ));
+        $withOdometer = $this->purchasesWithOdometer();
 
         $distances = [];
         $previous = null;
@@ -117,19 +115,16 @@ final class FuelLog
     }
 
     /**
-     * Per-purchase efficiency (`Km/Galón`), one entry per purchase that has a
-     * preceding odometer reading and a positive travelled distance.
+     * Per-purchase economy, one entry per purchase that has a preceding
+     * odometer reading and a positive travelled distance.
      *
-     * @return array<int, FuelEfficiency>
+     * @return array<int, EnergyEconomy>
      */
-    public function efficiencies(): array
+    public function economies(): array
     {
-        $withOdometer = array_values(array_filter(
-            $this->chronologically(),
-            static fn (FuelPurchase $purchase): bool => $purchase->hasOdometer(),
-        ));
+        $withOdometer = $this->purchasesWithOdometer();
 
-        $efficiencies = [];
+        $economies = [];
         $previous = null;
 
         foreach ($withOdometer as $purchase) {
@@ -138,30 +133,30 @@ final class FuelLog
             if ($previous !== null && $current !== null) {
                 $delta = Distance::betweenReadings($previous, $current);
 
-                if ($delta->isPositive() && $purchase->volume->isPositive()) {
-                    $efficiencies[] = $purchase->efficiencyFor($delta);
+                if ($delta->isPositive() && $purchase->energy->isPositive()) {
+                    $economies[] = $purchase->economyFor($delta);
                 }
             }
 
             $previous = $current;
         }
 
-        return $efficiencies;
+        return $economies;
     }
 
     /**
-     * @return array<int, FuelEfficiency>
+     * @return array<int, EnergyEconomy>
      */
-    public function usableEfficiencies(): array
+    public function usableEconomies(): array
     {
         return array_values(array_filter(
-            $this->efficiencies(),
-            static fn (FuelEfficiency $efficiency): bool => $efficiency->isUsable(),
+            $this->economies(),
+            static fn (EnergyEconomy $economy): bool => $economy->isUsable(),
         ));
     }
 
     /**
-     * Sum of every `Km Recorridos` delta.
+     * Sum of every travelled distance delta.
      */
     public function totalDistance(): Distance
     {
@@ -175,30 +170,38 @@ final class FuelLog
     }
 
     /**
-     * Sum of every purchased volume.
+     * Sum of every purchased quantity of energy.
+     *
+     * All purchases must be in the same unit; mixing kilowatt-hours with a
+     * liquid fuel is a domain error.
      */
-    public function totalVolume(): FuelVolume
+    public function totalEnergy(?EnergyUnit $unit = null): EnergyQuantity
     {
-        $total = FuelVolume::zero();
+        if ($this->purchases === []) {
+            return EnergyQuantity::zero($unit ?? EnergyUnit::Gallons);
+        }
+
+        $first = $this->purchases[0]->energy->unit;
+        $total = EnergyQuantity::zero($first);
 
         foreach ($this->purchases as $purchase) {
-            $total = $total->plus($purchase->volume);
+            $total = $total->plus($purchase->energy);
         }
 
         return $total;
     }
 
     /**
-     * Total `Monto` (including tax) across every purchase.
+     * Total spend (including tax) across every purchase.
      */
     public function totalSpend(): Money
     {
         if ($this->purchases === []) {
-            throw InvalidDomainValueException::outOfRange('fuel log spend', 'empty log without currency');
+            throw InvalidDomainValueException::outOfRange('energy log spend', 'empty log without currency');
         }
 
         $amounts = array_map(
-            static fn (FuelPurchase $purchase): Money => $purchase->total(),
+            static fn (EnergyPurchase $purchase): Money => $purchase->total(),
             $this->purchases,
         );
 
@@ -206,24 +209,49 @@ final class FuelLog
     }
 
     /**
-     * Total `Valor total` (subtotal before tax) across every purchase.
+     * Total spend before tax across every purchase.
      */
     public function totalSubtotal(): Money
     {
         if ($this->purchases === []) {
-            throw InvalidDomainValueException::outOfRange('fuel log subtotal', 'empty log without currency');
+            throw InvalidDomainValueException::outOfRange('energy log subtotal', 'empty log without currency');
         }
 
         $amounts = array_map(
-            static fn (FuelPurchase $purchase): Money => $purchase->subtotal(),
+            static fn (EnergyPurchase $purchase): Money => $purchase->subtotal(),
             $this->purchases,
         );
 
         return Money::sum($amounts);
     }
 
+    /**
+     * Whether every purchase in the log replenished an electric vehicle.
+     */
+    public function isElectric(): bool
+    {
+        foreach ($this->purchases as $purchase) {
+            if (! $purchase->isElectric()) {
+                return false;
+            }
+        }
+
+        return $this->purchases !== [];
+    }
+
     public function isEmpty(): bool
     {
         return $this->purchases === [];
+    }
+
+    /**
+     * @return array<int, EnergyPurchase>
+     */
+    private function purchasesWithOdometer(): array
+    {
+        return array_values(array_filter(
+            $this->chronologically(),
+            static fn (EnergyPurchase $purchase): bool => $purchase->hasOdometer(),
+        ));
     }
 }

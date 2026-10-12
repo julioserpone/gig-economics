@@ -6,30 +6,34 @@ namespace GigEconomics\Domain\Analytics;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode as BrickRoundingMode;
-use GigEconomics\Domain\Fuel\FuelLog;
-use GigEconomics\Domain\Fuel\FuelPurchase;
+use GigEconomics\Domain\Energy\EnergyLog;
+use GigEconomics\Domain\Energy\EnergyPurchase;
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelEfficiency;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyEconomy;
+use GigEconomics\Domain\Shared\EnergyQuantity;
 use GigEconomics\Domain\Shared\TimeOfDay;
 use GigEconomics\Exceptions\InvalidDomainValueException;
 
 /**
- * Analytical layer over a {@see FuelLog}.
+ * Analytical layer over an {@see EnergyLog}.
  *
- * Every figure reproduces a formula from the source workbook:
- *  - weighted price     -> SUM(Monto) / SUM(Galones)
- *  - average efficiency -> AVERAGEIF(Km/Galon, ">0")
+ * Every figure is drivetrain-agnostic: a combustion log is measured in gallons
+ * or litres and an electric log in kilowatt-hours, yet the same methods produce
+ * the weighted price, the average economy, the monthly series, the vendor
+ * ranking and the time-of-day breakdown for either.
+ *
+ *  - weighted price     -> total spend / total energy
+ *  - average economy    -> mean of the strictly positive economy readings
  *  - monthly series     -> spend grouped by calendar month
- *  - vendor ranking     -> spend, weighted price and efficiency per vendor
+ *  - vendor ranking     -> spend, weighted price and economy per vendor
  *  - time-of-day bands  -> spend grouped by 4 fixed bands
  */
-final class FuelAnalytics
+final class EnergyAnalytics
 {
-    public function __construct(private readonly FuelLog $log) {}
+    public function __construct(private readonly EnergyLog $log) {}
 
-    public function fromLog(FuelLog $log): self
+    public static function fromLog(EnergyLog $log): self
     {
         return new self($log);
     }
@@ -37,71 +41,70 @@ final class FuelAnalytics
     /**
      * Headline KPIs for the whole log.
      */
-    public function kpis(): FuelKpis
+    public function kpis(): EnergyKpis
     {
         $purchases = $this->log->all();
 
         if ($purchases === []) {
-            throw InvalidDomainValueException::outOfRange('fuel analytics', 'empty log');
+            throw InvalidDomainValueException::outOfRange('energy analytics', 'empty log');
         }
 
-        $totalSpend = $this->log->totalSpend();
-        $totalSubtotal = $this->log->totalSubtotal();
-        $totalVolume = $this->log->totalVolume();
-
-        return new FuelKpis(
+        return new EnergyKpis(
             purchaseCount: count($purchases),
-            totalVolume: $totalVolume,
-            totalSpend: $totalSpend,
-            totalSubtotal: $totalSubtotal,
-            weightedPricePerGallon: $this->weightedPrice(),
-            averageEfficiency: $this->averageEfficiency(),
+            totalEnergy: $this->log->totalEnergy(),
+            totalSpend: $this->log->totalSpend(),
+            totalSubtotal: $this->log->totalSubtotal(),
+            weightedPricePerUnit: $this->weightedPrice(),
+            averageEconomy: $this->averageEconomy(),
             vendorCount: count($this->groupByVendorKey()),
-            validEfficiencyCount: count($this->log->usableEfficiencies()),
+            validEconomyCount: count($this->log->usableEconomies()),
             totalDistance: $this->log->totalDistance(),
+            isElectric: $this->log->isElectric(),
         );
     }
 
     /**
-     * `SUM(Monto) / SUM(Galones)`: the volume-weighted price per gallon.
+     * The volume- or energy-weighted price per unit: total spend divided by
+     * total energy.
      *
      * It is a ratio of sums, never an average of per-purchase prices, because
-     * that would over-weight small refuels.
+     * that would over-weight small purchases.
      */
     public function weightedPrice(): BigDecimal
     {
-        $volume = $this->log->totalVolume();
+        $energy = $this->log->totalEnergy();
 
-        if (! $volume->isPositive()) {
-            throw InvalidDomainValueException::divisionByZero('weighted price per gallon');
+        if (! $energy->isPositive()) {
+            throw InvalidDomainValueException::divisionByZero('weighted price per unit');
         }
 
         return $this->log->totalSpend()->toDecimal()->dividedBy(
-            $volume->toDecimal(),
+            $energy->toDecimal(),
             6,
             BrickRoundingMode::HALF_UP,
         );
     }
 
     /**
-     * `AVERAGEIF(Km/Galon, ">0")`: average of usable efficiencies only.
+     * The mean of the strictly positive economy readings only.
      */
-    public function averageEfficiency(): ?FuelEfficiency
+    public function averageEconomy(): ?EnergyEconomy
     {
-        $efficiencies = $this->log->usableEfficiencies();
+        $economies = $this->log->usableEconomies();
 
-        if ($efficiencies === []) {
+        if ($economies === []) {
             return null;
         }
 
         $sum = BigDecimal::zero();
 
-        foreach ($efficiencies as $efficiency) {
-            $sum = $sum->plus($efficiency->kilometresPerGallon());
+        foreach ($economies as $economy) {
+            $sum = $sum->plus($economy->kilometresPerUnit());
         }
 
-        return FuelEfficiency::ofKilometresPerGallon(
-            $sum->dividedBy((string) count($efficiencies), 9, BrickRoundingMode::HALF_UP),
+        return EnergyEconomy::of(
+            $sum->dividedBy((string) count($economies), 9, BrickRoundingMode::HALF_UP),
+            $economies[0]->unit,
         );
     }
 
@@ -112,7 +115,7 @@ final class FuelAnalytics
      */
     public function monthlySeries(): array
     {
-        /** @var array<string, array<int, FuelPurchase>> $groups */
+        /** @var array<string, array<int, EnergyPurchase>> $groups */
         $groups = [];
 
         foreach ($this->log->all() as $purchase) {
@@ -131,7 +134,7 @@ final class FuelAnalytics
             $summaries[] = new PeriodSummary(
                 period: $period,
                 purchaseCount: count($purchases),
-                totalVolume: $this->sumVolume($purchases),
+                totalEnergy: $this->sumEnergy($purchases),
                 totalSpend: $this->sumSpend($purchases),
                 totalDistance: $this->sumDistance($purchases),
             );
@@ -157,11 +160,11 @@ final class FuelAnalytics
                 vendorName: $first->vendorName ?? 'Unknown vendor',
                 vendorTaxId: $first->vendorTaxId,
                 purchaseCount: count($purchases),
-                totalVolume: $this->sumVolume($purchases),
+                totalEnergy: $this->sumEnergy($purchases),
                 totalSpend: $this->sumSpend($purchases),
-                weightedPricePerGallon: $this->weightedPriceOf($purchases),
-                averageEfficiency: $this->averageEfficiencyOf($purchases),
-                validEfficiencyCount: $this->countValidEfficiencies($purchases),
+                weightedPricePerUnit: $this->weightedPriceOf($purchases),
+                averageEconomy: $this->averageEconomyOf($purchases),
+                validEconomyCount: $this->countValidEconomies($purchases),
             );
         }
 
@@ -179,27 +182,27 @@ final class FuelAnalytics
     {
         $ranked = $this->vendorRanking(PHP_INT_MAX);
 
-        usort($ranked, static fn (VendorSummary $a, VendorSummary $b): int => $a->weightedPricePerGallon->isLessThan($b->weightedPricePerGallon) ? -1 : ($a->weightedPricePerGallon->isEqualTo($b->weightedPricePerGallon) ? 0 : 1));
+        usort($ranked, static fn (VendorSummary $a, VendorSummary $b): int => $a->weightedPricePerUnit->isLessThan($b->weightedPricePerUnit) ? -1 : ($a->weightedPricePerUnit->isEqualTo($b->weightedPricePerUnit) ? 0 : 1));
 
         return array_slice($ranked, 0, $limit);
     }
 
     /**
-     * Vendors with the best (highest) average efficiency, requiring at least
-     * two refuels so a single reading cannot dominate the ranking.
+     * Vendors with the best (highest) average economy, requiring at least two
+     * readings so a single value cannot dominate the ranking.
      *
      * @return array<int, VendorSummary>
      */
-    public function bestEfficiencyVendors(int $limit = 10, int $minimumPurchases = 2): array
+    public function bestEconomyVendors(int $limit = 10, int $minimumPurchases = 2): array
     {
         $ranked = array_values(array_filter(
             $this->vendorRanking(PHP_INT_MAX),
-            static fn (VendorSummary $summary): bool => $summary->isRankableForEfficiency($minimumPurchases),
+            static fn (VendorSummary $summary): bool => $summary->isRankableForEconomy($minimumPurchases),
         ));
 
         usort($ranked, static function (VendorSummary $a, VendorSummary $b): int {
-            $left = $a->averageEfficiency?->kilometresPerGallon();
-            $right = $b->averageEfficiency?->kilometresPerGallon();
+            $left = $a->averageEconomy?->kilometresPerUnit();
+            $right = $b->averageEconomy?->kilometresPerUnit();
 
             if ($left === null || $right === null) {
                 return 0;
@@ -218,7 +221,7 @@ final class FuelAnalytics
      */
     public function timeOfDayBreakdown(): array
     {
-        /** @var array<string, array<int, FuelPurchase>> $groups */
+        /** @var array<string, array<int, EnergyPurchase>> $groups */
         $groups = [];
 
         foreach ($this->log->all() as $purchase) {
@@ -248,9 +251,6 @@ final class FuelAnalytics
 
     /**
      * Share of total spend concentrated in the top N vendors.
-     *
-     * The workbook reports the top-2 concentration as `0.826...`; that is the
-     * ratio of the two largest vendor spends to total spend.
      */
     public function spendConcentration(int $topN = 2): BigDecimal
     {
@@ -288,7 +288,7 @@ final class FuelAnalytics
         );
     }
 
-    public function fuelLog(): FuelLog
+    public function energyLog(): EnergyLog
     {
         return $this->log;
     }
@@ -296,11 +296,11 @@ final class FuelAnalytics
     /**
      * Group purchases by a stable vendor key (tax id first, then name).
      *
-     * @return array<string, array<int, FuelPurchase>>
+     * @return array<string, array<int, EnergyPurchase>>
      */
     private function groupByVendorKey(): array
     {
-        /** @var array<string, array<int, FuelPurchase>> $groups */
+        /** @var array<string, array<int, EnergyPurchase>> $groups */
         $groups = [];
 
         foreach ($this->log->all() as $purchase) {
@@ -312,26 +312,30 @@ final class FuelAnalytics
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
-    private function sumVolume(array $purchases): FuelVolume
+    private function sumEnergy(array $purchases): EnergyQuantity
     {
-        $total = FuelVolume::zero();
+        if ($purchases === []) {
+            return EnergyQuantity::zero();
+        }
+
+        $total = EnergyQuantity::zero($purchases[0]->energy->unit);
 
         foreach ($purchases as $purchase) {
-            $total = $total->plus($purchase->volume);
+            $total = $total->plus($purchase->energy);
         }
 
         return $total;
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
     private function sumSpend(array $purchases): Money
     {
         $amounts = array_map(
-            static fn (FuelPurchase $purchase): Money => $purchase->total(),
+            static fn (EnergyPurchase $purchase): Money => $purchase->total(),
             $purchases,
         );
 
@@ -339,58 +343,59 @@ final class FuelAnalytics
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
     private function sumDistance(array $purchases): Distance
     {
-        return FuelLog::fromPurchases($purchases)->totalDistance();
+        return EnergyLog::fromPurchases($purchases)->totalDistance();
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
     private function weightedPriceOf(array $purchases): BigDecimal
     {
-        $volume = $this->sumVolume($purchases);
+        $energy = $this->sumEnergy($purchases);
 
-        if (! $volume->isPositive()) {
+        if (! $energy->isPositive()) {
             return BigDecimal::zero();
         }
 
         return $this->sumSpend($purchases)->toDecimal()->dividedBy(
-            $volume->toDecimal(),
+            $energy->toDecimal(),
             6,
             BrickRoundingMode::HALF_UP,
         );
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
-    private function averageEfficiencyOf(array $purchases): ?FuelEfficiency
+    private function averageEconomyOf(array $purchases): ?EnergyEconomy
     {
-        $efficiencies = FuelLog::fromPurchases($purchases)->usableEfficiencies();
+        $economies = EnergyLog::fromPurchases($purchases)->usableEconomies();
 
-        if ($efficiencies === []) {
+        if ($economies === []) {
             return null;
         }
 
         $sum = BigDecimal::zero();
 
-        foreach ($efficiencies as $efficiency) {
-            $sum = $sum->plus($efficiency->kilometresPerGallon());
+        foreach ($economies as $economy) {
+            $sum = $sum->plus($economy->kilometresPerUnit());
         }
 
-        return FuelEfficiency::ofKilometresPerGallon(
-            $sum->dividedBy((string) count($efficiencies), 9, BrickRoundingMode::HALF_UP),
+        return EnergyEconomy::of(
+            $sum->dividedBy((string) count($economies), 9, BrickRoundingMode::HALF_UP),
+            $economies[0]->unit,
         );
     }
 
     /**
-     * @param array<int, FuelPurchase> $purchases
+     * @param array<int, EnergyPurchase> $purchases
      */
-    private function countValidEfficiencies(array $purchases): int
+    private function countValidEconomies(array $purchases): int
     {
-        return count(FuelLog::fromPurchases($purchases)->usableEfficiencies());
+        return count(EnergyLog::fromPurchases($purchases)->usableEconomies());
     }
 }

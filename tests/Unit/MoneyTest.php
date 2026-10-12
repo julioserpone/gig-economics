@@ -15,8 +15,8 @@ it('adds amounts without floating point drift', function (): void {
         ->and($result->equals(Money::of('0.3')))->toBeTrue();
 });
 
-it('reproduces the invoice subtotal, tax and total of a workbook row', function (): void {
-    // Row 2026-04-05: 8.158 gal @ 2.8783 = 23.4811714 subtotal; 15% IVA; total 27.00334711
+it('reproduces the subtotal, tax and total of a purchase', function (): void {
+    // 8.158 units @ 2.8783 = 23.4811714 subtotal; 15% tax; total 27.00334711
     $subtotal = Money::of('8.158')->multipliedBy('2.8783', 7);
     $tax = $subtotal->percentage(Percentage::of(15));
     $total = $subtotal->plus($tax);
@@ -28,9 +28,9 @@ it('reproduces the invoice subtotal, tax and total of a workbook row', function 
 
 it('returns the weighted ratio of sums and never an average of ratios', function (): void {
     $spend = Money::of('1912.3488529');
-    $volume = Money::of('395.24');
+    $energy = Money::of('395.24');
 
-    expect($spend->divideBy($volume, 6)->__toString())->toBe('4.838450');
+    expect($spend->divideBy($energy, 6)->__toString())->toBe('4.838450');
 });
 
 it('guards against dividing by zero', function (): void {
