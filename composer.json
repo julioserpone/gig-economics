@@ -1,0 +1,90 @@
+{
+	"$schema": "https://getcomposer.org/schema.json",
+	"name": "julioserpone/gig-economics",
+	"description": "Platform-agnostic, decoupled PHP library to measure fuel efficiency and the real profitability of a trip taken on Uber, DiDi, inDrive, Lyft or any ride-hailing platform.",
+	"keywords": [
+		"uber",
+		"didi",
+		"indrive",
+		"lyft",
+		"rideshare",
+		"ride-hailing",
+		"profitability",
+		"fuel-consumption",
+		"fuel-efficiency",
+		"gig-economy",
+		"driver-earnings"
+	],
+	"type": "library",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Julio Serpone",
+			"homepage": "https://github.com/julioserpone"
+		}
+	],
+	"require": {
+		"php": ">=8.3",
+		"brick/math": "^0.12 || ^0.13 || ^0.14"
+	},
+	"require-dev": {
+		"laravel/pint": "^1.27",
+		"phpstan/phpstan": "^2.1",
+		"phpstan/phpstan-strict-rules": "^2.0",
+		"pestphp/pest": "^3.8 || ^4.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"GigEconomics\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"GigEconomics\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"test": [
+			"@php vendor/bin/pest"
+		],
+		"test:coverage": [
+			"@php vendor/bin/pest --coverage"
+		],
+		"lint": [
+			"pint"
+		],
+		"lint:check": [
+			"pint --test"
+		],
+		"analyse": [
+			"phpstan analyse --no-progress"
+		],
+		"ci": [
+			"@lint:check",
+			"@analyse",
+			"@test"
+		]
+	},
+	"config": {
+		"sort-packages": true,
+		"allow-plugins": {
+			"pestphp/pest-plugin": true
+		}
+	},
+	"extra": {
+		"branch-alias": {
+			"dev-main": "1.x-dev"
+		}
+	},
+	"minimum-stability": "stable",
+	"prefer-stable": true,
+	"archive": {
+		"exclude": [
+			"/tests",
+			"/.github",
+			"/phpstan.neon",
+			"/pint.json",
+			"/.agents"
+		]
+	}
+}
