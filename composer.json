@@ -81,10 +81,11 @@
 	"archive": {
 		"exclude": [
 			"/tests",
+			"/docs",
 			"/.github",
+			"/AGENTS.md",
 			"/phpstan.neon",
-			"/pint.json",
-			"/.agents"
+			"/pint.json"
 		]
 	}
 }
