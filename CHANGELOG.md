@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for either drivetrain.
 - `TripCostProfile::forElectric()` prices a trip per kilowatt-hour alongside
   the existing `forCombustion()` factory.
+- `Configuration`, an immutable, framework-agnostic object holding the library
+  defaults (tax rate, default energy type, profit target). It builds from
+  `defaults()`, an explicit array (`fromArray()`) or the environment
+  (`fromEnvironment()`), and never calls `env()` or a framework helper.
+- `TripProfitabilityFactory` bridges a `Configuration` to the pure domain by
+  building a `TripProfitabilityCalculator` with the configured profit target.
 
 ### Changed
 
@@ -31,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the previous fixed spreadsheet layout.
 - Imports are now **pipe-delimited** (`|`, `.psv`) with quoted fields, because
   free-text values such as vendor names routinely contain commas.
+- `EnergyLogImporter` takes an optional `Configuration`; its `fromRows()`,
+  `fromString()` and `fromFile()` tax rate and energy type now default to the
+  configured values (an explicit call argument still overrides them).
 
 ### Removed
 
