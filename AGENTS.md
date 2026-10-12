@@ -40,6 +40,10 @@ returns numbers; it never performs I/O from the domain layer.
    decide.
 6. **No hidden dependencies.** Do not add a runtime `composer require` without
    a strong justification; this library is intentionally small.
+7. **Configuration is explicit and framework-agnostic.** Defaults live in the
+   immutable `Support\Configuration` object; the pure domain never reads it.
+   Never call `env()`, `config()` or any framework helper inside the library —
+   the caller decides where values come from.
 
 ## Never do this
 
@@ -70,7 +74,8 @@ src/
 │   │                 PeriodSummary, TimeOfDaySummary
 │   └── Quality/      DataQualityAnalyzer, DataQualityIssue,
 │                     DataQualityIssueType, Severity
-├── Support/          EnergyLogImporter                     (the only I/O)
+├── Support/          EnergyLogImporter, Configuration,
+│                     TripProfitabilityFactory              (the only I/O)
 └── Exceptions/       CurrencyMismatchException, InvalidDomainValueException
 ```
 
@@ -86,6 +91,9 @@ Key ideas:
   requested.
 - **`TripCostProfile`** holds the reusable assumptions; `forCombustion()` and
   `forElectric()` are the friendly factories over the generic `create()`.
+- **`Configuration`** (`Support`) holds the editable defaults (tax rate, default
+  energy type, profit target) and builds from an array or the environment. The
+  domain stays pure: values are always passed in explicitly, never read from it.
 
 ## Workflow for a change
 

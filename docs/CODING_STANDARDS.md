@@ -65,6 +65,19 @@ These rules are enforced by `composer ci`. Read them together with
   `"The distance cannot be negative. Received: -1."`.
 - Never swallow an exception to keep a calculation running; surface it.
 
+## Configuration
+
+- Editable defaults belong in `Support\Configuration`, never inline as magic
+  numbers or string literals sprinkled across classes.
+- The library never reads configuration itself from the environment: it exposes
+  `fromArray()` and `fromEnvironment()` and lets the caller choose. Never call
+  `env()`, `config()` or a framework helper anywhere in `src/`.
+- The pure domain must not import `Support\Configuration`. Bridge it in the
+  `Support` layer (e.g. `TripProfitabilityFactory`) and pass plain values into
+  the domain.
+- Configuration is immutable: add a `with*()` method returning a new instance
+  rather than mutating state.
+
 ## Documentation
 
 - Every public class and non-obvious method has a concise docblock that explains

@@ -36,17 +36,25 @@ use GigEconomics\Exceptions\InvalidDomainValueException;
  * Only input columns are read. Any calculated column the export may also carry
  * is ignored and recomputed by the domain, so a stale formula can never leak
  * into the numbers.
+ *
+ * Defaults (tax rate, energy type) come from the injected {@see Configuration};
+ * pass them explicitly per call to override the configured values.
  */
 final class EnergyLogImporter
 {
+    public function __construct(private readonly Configuration $configuration = new Configuration) {}
+
     /**
      * @param array<int, array<string, string|null>> $rows
      */
     public function fromRows(
         array $rows,
-        float $taxRatePercent = 15.0,
-        EnergyType $energyType = EnergyType::RegularGasoline,
+        ?float $taxRatePercent = null,
+        ?EnergyType $energyType = null,
     ): EnergyLog {
+        $taxRatePercent ??= $this->configuration->defaultTaxRatePercent;
+        $energyType ??= $this->configuration->defaultEnergyType;
+
         $purchases = [];
 
         foreach ($rows as $index => $row) {
@@ -90,8 +98,8 @@ final class EnergyLogImporter
      */
     public function fromString(
         string $contents,
-        float $taxRatePercent = 15.0,
-        EnergyType $energyType = EnergyType::RegularGasoline,
+        ?float $taxRatePercent = null,
+        ?EnergyType $energyType = null,
     ): EnergyLog {
         $contents = $this->stripBom($contents);
         $lines = preg_split('/\r\n|\r|\n/', trim($contents));
@@ -125,8 +133,8 @@ final class EnergyLogImporter
 
     public function fromFile(
         string $path,
-        float $taxRatePercent = 15.0,
-        EnergyType $energyType = EnergyType::RegularGasoline,
+        ?float $taxRatePercent = null,
+        ?EnergyType $energyType = null,
     ): EnergyLog {
         if (! is_file($path)) {
             throw InvalidDomainValueException::outOfRange('csv path', $path);

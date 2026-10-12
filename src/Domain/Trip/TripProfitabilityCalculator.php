@@ -27,8 +27,13 @@ final class TripProfitabilityCalculator
 
     public static function withDefaultTarget(?Money $target = null): self
     {
-        return new self($target ?? Money::of('0.15'));
+        return new self($target ?? Money::of(self::DEFAULT_TARGET_PROFIT_PER_KILOMETRE));
     }
+
+    /**
+     * Default profit target per kilometre used when none is supplied.
+     */
+    public const DEFAULT_TARGET_PROFIT_PER_KILOMETRE = '0.15';
 
     /**
      * Assess a trip offer against a cost profile.
@@ -121,7 +126,7 @@ final class TripProfitabilityCalculator
             return $this->defaultTargetProfitPerKilometre;
         }
 
-        return Money::of('0.15', $profile->currency());
+        return Money::of(self::DEFAULT_TARGET_PROFIT_PER_KILOMETRE, $profile->currency());
     }
 
     /**

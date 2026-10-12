@@ -181,6 +181,68 @@ Recognized input columns are `date`, `time`, `vendor_tax_id`, `vendor_name`,
 columns are read: any calculated column may also be exported and is ignored and
 recomputed by the domain, so a stale formula can never leak into your numbers.
 
+## Configuration
+
+The defaults the library ships with (tax rate, default energy type, profit
+target) live in one immutable, framework-agnostic `Configuration` object instead
+of being hard-coded across the code. It never calls `env()` or a framework
+helper; **you** decide where the values come from.
+
+```php
+use GigEconomics\Support\Configuration;
+use GigEconomics\Support\EnergyLogImporter;
+use GigEconomics\Support\TripProfitabilityFactory;
+
+// 1. Built-in defaults, no environment access:
+$configuration = Configuration::defaults();
+
+// 2. From an explicit array — a Laravel config file, a Symfony parameter bag,
+//    a plain PHP array from a CLI, whatever you use:
+$configuration = Configuration::fromArray([
+    'tax_rate_percent' => 12.0,
+    'default_energy_type' => 'electric',
+    'target_profit_per_kilometre' => '0.20',
+]);
+
+// 3. From the process environment (GIG_ECONOMICS_TAX_RATE, ...):
+$configuration = Configuration::fromEnvironment();
+
+// Configuration is immutable — with*() returns a new instance.
+$configuration = Configuration::defaults()->withTaxRatePercent(0.0);
+
+// The importer and the calculator factory consume it; an explicit call
+// argument always overrides the configured default.
+$log = (new EnergyLogImporter($configuration))->fromFile('fuel_log.psv');
+$calculator = TripProfitabilityFactory::fromConfiguration($configuration)->calculator();
+```
+
+### Using it from Laravel
+
+Because the object is plain PHP, a Laravel app can publish its own config file
+and hand it to the library — the package itself never depends on Laravel:
+
+```php
+// config/gig-economics.php (in your application, not in this package)
+return [
+    'tax_rate_percent' => env('GIG_ECONOMICS_TAX_RATE', 15.0),
+    'default_energy_type' => 'regular_gasoline',
+    'target_profit_per_kilometre' => '0.15',
+];
+
+// elsewhere
+$configuration = Configuration::fromArray(config('gig-economics'));
+```
+
+| Key                           | Default              | Meaning                                   |
+| ----------------------------- | -------------------- | ----------------------------------------- |
+| `tax_rate_percent`            | `15.0`               | Tax applied to each purchase subtotal      |
+| `default_energy_type`         | `regular_gasoline`   | Energy type assumed when the file omits it |
+| `target_profit_per_kilometre` | `0.15`               | Default profit target for the verdict      |
+
+The equivalent environment variables are `GIG_ECONOMICS_TAX_RATE`,
+`GIG_ECONOMICS_DEFAULT_ENERGY_TYPE` and
+`GIG_ECONOMICS_TARGET_PROFIT_PER_KILOMETRE`.
+
 ## Architecture
 
 ```
@@ -194,7 +256,8 @@ src/
 │   │                 TripProfitabilityCalculator, TripVerdict
 │   ├── Analytics/    EnergyAnalytics, EnergyKpis, VendorSummary, PeriodSummary
 │   └── Quality/      DataQualityAnalyzer, DataQualityIssue, Severity
-├── Support/          EnergyLogImporter
+├── Support/          EnergyLogImporter, Configuration,
+│                     TripProfitabilityFactory              (the only I/O)
 └── Exceptions/       CurrencyMismatchException, InvalidDomainValueException
 ```
 
@@ -216,6 +279,9 @@ Laravel, Symfony, a CLI, or a long-running worker.
   caller convention.
 - **Platform-agnostic.** `Platform` ships defaults for Uber, DiDi, inDrive and
   Lyft, and `Platform::Custom` lets you model any other marketplace.
+- **Framework-agnostic configuration.** Defaults live in one immutable
+  `Configuration` object that reads from an array or the environment; the pure
+  domain never reads it, it always receives explicit values.
 
 ## Testing
 

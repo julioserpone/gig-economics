@@ -16,6 +16,7 @@ tests/
 │   ├── UnitsTest.php
 │   ├── EnergyPurchaseTest.php
 │   ├── EnergyLogImporterTest.php
+│   ├── ConfigurationTest.php
 │   ├── DataQualityAnalyzerTest.php
 │   └── TripProfitabilityTest.php
 ├── Integration/              # parses a fixture file end to end
