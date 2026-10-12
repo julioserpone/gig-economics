@@ -20,7 +20,7 @@ final class TripCostBreakdown
     public function __construct(
         public readonly Money $grossFare,
         public readonly Money $platformCommission,
-        public readonly Money $fuelCost,
+        public readonly Money $energyCost,
         public readonly Money $depreciationCost,
         public readonly Money $otherCosts,
         public readonly Money $netProfit,
@@ -29,12 +29,12 @@ final class TripCostBreakdown
     ) {}
 
     /**
-     * Total cost borne by the driver: commission + fuel + depreciation + extras.
+     * Total cost borne by the driver: commission + energy + depreciation + extras.
      */
     public function totalCosts(): Money
     {
         return $this->platformCommission
-            ->plus($this->fuelCost)
+            ->plus($this->energyCost)
             ->plus($this->depreciationCost)
             ->plus($this->otherCosts);
     }
@@ -90,8 +90,7 @@ final class TripCostBreakdown
     }
 
     /**
-     * Fuel efficiency implied by this trip, i.e. distance divided by the
-     * volume that the fuel cost could buy. Null when the ratio is undefined.
+     * Whether the trip paid more than it cost.
      */
     public function isProfitable(): bool
     {

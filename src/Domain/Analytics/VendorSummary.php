@@ -6,12 +6,13 @@ namespace GigEconomics\Domain\Analytics;
 
 use Brick\Math\BigDecimal;
 use GigEconomics\Domain\Money\Money;
-use GigEconomics\Domain\Shared\FuelEfficiency;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyEconomy;
+use GigEconomics\Domain\Shared\EnergyQuantity;
 use JsonSerializable;
 
 /**
- * Aggregated performance of one fuel vendor (gas station).
+ * Aggregated performance of one energy vendor: a filling station for combustion
+ * vehicles, or a charging operator for electric ones.
  */
 final class VendorSummary implements JsonSerializable
 {
@@ -19,20 +20,20 @@ final class VendorSummary implements JsonSerializable
         public readonly string $vendorName,
         public readonly ?string $vendorTaxId,
         public readonly int $purchaseCount,
-        public readonly FuelVolume $totalVolume,
+        public readonly EnergyQuantity $totalEnergy,
         public readonly Money $totalSpend,
-        public readonly BigDecimal $weightedPricePerGallon,
-        public readonly ?FuelEfficiency $averageEfficiency,
-        public readonly int $validEfficiencyCount,
+        public readonly BigDecimal $weightedPricePerUnit,
+        public readonly ?EnergyEconomy $averageEconomy,
+        public readonly int $validEconomyCount,
     ) {}
 
     /**
-     * The dashboard only ranks a vendor's efficiency once it has at least two
-     * refuels, because a single reading is anecdotal.
+     * A vendor is only ranked by economy once it has at least two readings,
+     * because a single reading is anecdotal.
      */
-    public function isRankableForEfficiency(int $minimumPurchases = 2): bool
+    public function isRankableForEconomy(int $minimumPurchases = 2): bool
     {
-        return $this->validEfficiencyCount >= $minimumPurchases && $this->averageEfficiency !== null;
+        return $this->validEconomyCount >= $minimumPurchases && $this->averageEconomy !== null;
     }
 
     /**
@@ -44,11 +45,12 @@ final class VendorSummary implements JsonSerializable
             'vendor_name' => $this->vendorName,
             'vendor_tax_id' => $this->vendorTaxId,
             'purchase_count' => $this->purchaseCount,
-            'total_volume' => (string) $this->totalVolume,
+            'total_energy' => (string) $this->totalEnergy,
+            'energy_unit' => $this->totalEnergy->unit->value,
             'total_spend' => (string) $this->totalSpend,
-            'weighted_price_per_gallon' => (string) $this->weightedPricePerGallon,
-            'average_efficiency' => $this->averageEfficiency === null ? null : (string) $this->averageEfficiency,
-            'valid_efficiency_count' => $this->validEfficiencyCount,
+            'weighted_price_per_unit' => (string) $this->weightedPricePerUnit,
+            'average_economy' => $this->averageEconomy === null ? null : (string) $this->averageEconomy,
+            'valid_economy_count' => $this->validEconomyCount,
         ];
     }
 }

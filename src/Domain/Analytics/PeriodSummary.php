@@ -6,18 +6,18 @@ namespace GigEconomics\Domain\Analytics;
 
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyQuantity;
 use JsonSerializable;
 
 /**
- * Aggregated spend, volume and distance for one calendar period (usually a month).
+ * Aggregated spend, energy and distance for one calendar period (usually a month).
  */
 final class PeriodSummary implements JsonSerializable
 {
     public function __construct(
         public readonly string $period,
         public readonly int $purchaseCount,
-        public readonly FuelVolume $totalVolume,
+        public readonly EnergyQuantity $totalEnergy,
         public readonly Money $totalSpend,
         public readonly Distance $totalDistance,
     ) {}
@@ -30,7 +30,8 @@ final class PeriodSummary implements JsonSerializable
         return [
             'period' => $this->period,
             'purchase_count' => $this->purchaseCount,
-            'total_volume' => (string) $this->totalVolume,
+            'total_energy' => (string) $this->totalEnergy,
+            'energy_unit' => $this->totalEnergy->unit->value,
             'total_spend' => (string) $this->totalSpend,
             'total_distance' => (string) $this->totalDistance,
         ];

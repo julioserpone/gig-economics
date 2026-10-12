@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace GigEconomics\Domain\Fuel;
+namespace GigEconomics\Domain\Energy;
 
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -10,68 +10,71 @@ use GigEconomics\Domain\Money\Currency;
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Money\Percentage;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelEfficiency;
-use GigEconomics\Domain\Shared\FuelType;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyEconomy;
+use GigEconomics\Domain\Shared\EnergyQuantity;
+use GigEconomics\Domain\Shared\EnergyType;
 use GigEconomics\Domain\Shared\TimeOfDay;
 
 /**
- * A single refuelling event.
+ * A single replenishment event, whether refuelling a combustion vehicle or
+ * recharging an electric one.
  *
- * Mirrors one row of `TblGasolina` and reproduces every calculated column:
- * `Valor total`, `Iva 15%`, `Monto`, `Km Recorridos` and `Km/Galón`.
+ * A purchase always carries the amount of energy taken on board (gallons,
+ * litres or kilowatt-hours), the price paid per unit, and optionally the meter
+ * reading at the moment of replenishment, from which the distance covered since
+ * the previous purchase is derived.
  */
-final class FuelPurchase
+final class EnergyPurchase
 {
     public function __construct(
-        public readonly FuelVolume $volume,
-        public readonly FuelPrice $unitPrice,
+        public readonly EnergyQuantity $energy,
+        public readonly EnergyPrice $unitPrice,
         public readonly ?DateTimeImmutable $purchasedAt = null,
         public readonly ?string $vendorTaxId = null,
         public readonly ?string $vendorName = null,
         public readonly ?int $odometer = null,
-        public readonly ?FuelType $fuelType = null,
+        public readonly ?EnergyType $energyType = null,
         public readonly ?Percentage $taxRate = null,
         public readonly ?string $reference = null,
     ) {}
 
     /**
-     * Convenience factory matching the workbook's input columns.
+     * Named constructor mirroring the constructor for call-site readability.
      */
     public static function create(
-        FuelVolume $volume,
-        FuelPrice $unitPrice,
+        EnergyQuantity $energy,
+        EnergyPrice $unitPrice,
         ?DateTimeInterface $purchasedAt = null,
         ?string $vendorTaxId = null,
         ?string $vendorName = null,
         ?int $odometer = null,
-        ?FuelType $fuelType = null,
+        ?EnergyType $energyType = null,
         ?Percentage $taxRate = null,
         ?string $reference = null,
     ): self {
         return new self(
-            $volume,
+            $energy,
             $unitPrice,
             self::toImmutable($purchasedAt),
             $vendorTaxId,
             $vendorName,
             $odometer,
-            $fuelType,
+            $energyType,
             $taxRate,
             $reference,
         );
     }
 
     /**
-     * `Valor total`: subtotal before tax.
+     * Subtotal before tax: energy times unit price.
      */
     public function subtotal(): Money
     {
-        return $this->unitPrice->costOf($this->volume);
+        return $this->unitPrice->costOf($this->energy);
     }
 
     /**
-     * `Iva 15%`: tax applied on the subtotal.
+     * Tax applied on the subtotal.
      */
     public function tax(): Money
     {
@@ -81,7 +84,7 @@ final class FuelPurchase
     }
 
     /**
-     * `Monto`: total paid including tax.
+     * Total paid including tax.
      */
     public function total(): Money
     {
@@ -91,6 +94,15 @@ final class FuelPurchase
     public function currency(): Currency
     {
         return $this->unitPrice->currency();
+    }
+
+    /**
+     * Whether this purchase replenished an electric vehicle.
+     */
+    public function isElectric(): bool
+    {
+        return $this->energyType?->isElectric()
+            ?? $this->energy->isElectric();
     }
 
     public function purchasedOn(): ?string
@@ -109,11 +121,12 @@ final class FuelPurchase
     }
 
     /**
-     * `Km/Galón` for an explicit travelled distance.
+     * Energy economy (distance per unit of energy) for an explicit travelled
+     * distance.
      */
-    public function efficiencyFor(Distance $travelled): FuelEfficiency
+    public function economyFor(Distance $travelled): EnergyEconomy
     {
-        return FuelEfficiency::fromDistanceAndVolume($travelled, $this->volume);
+        return EnergyEconomy::fromDistanceAndEnergy($travelled, $this->energy);
     }
 
     private static function toImmutable(?DateTimeInterface $moment): ?DateTimeImmutable

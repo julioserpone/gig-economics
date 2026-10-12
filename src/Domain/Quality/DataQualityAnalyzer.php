@@ -6,21 +6,22 @@ namespace GigEconomics\Domain\Quality;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode as BrickRoundingMode;
-use GigEconomics\Domain\Fuel\FuelLog;
-use GigEconomics\Domain\Fuel\FuelPurchase;
-use GigEconomics\Domain\Shared\FuelEfficiency;
+use GigEconomics\Domain\Energy\EnergyLog;
+use GigEconomics\Domain\Energy\EnergyPurchase;
+use GigEconomics\Domain\Shared\EnergyEconomy;
 
 /**
- * Inspects a {@see FuelLog} for the quality problems the workbook flags:
+ * Inspects an {@see EnergyLog} for the quality problems that corrupt a
+ * driver's records:
  *
- *  - rows without a date (the source table reserves 7 empty rows);
+ *  - rows without a date;
  *  - odometer readings that are missing, duplicated or go backwards;
- *  - non-positive distances and volumes that would corrupt efficiency;
- *  - statistical outliers among usable efficiency readings (median + MAD).
+ *  - non-positive distances and energy amounts that would corrupt economy;
+ *  - statistical outliers among usable economy readings (median + MAD).
  */
 final class DataQualityAnalyzer
 {
-    public function __construct(private readonly FuelLog $log) {}
+    public function __construct(private readonly EnergyLog $log) {}
 
     /**
      * @return array<int, DataQualityIssue>
@@ -79,16 +80,16 @@ final class DataQualityAnalyzer
     }
 
     /**
-     * Efficiency readings flagged as outliers via the median absolute
-     * deviation, a robust alternative to mean/standard deviation.
+     * Economy readings flagged as outliers via the median absolute deviation,
+     * a robust alternative to mean/standard deviation.
      *
-     * @return array<int, FuelEfficiency>
+     * @return array<int, EnergyEconomy>
      */
-    public function outlierEfficiencies(float $threshold = 3.5): array
+    public function outlierEconomies(float $threshold = 3.5): array
     {
         $values = array_map(
-            static fn (FuelEfficiency $efficiency): float => $efficiency->toFloat(),
-            $this->log->usableEfficiencies(),
+            static fn (EnergyEconomy $economy): float => $economy->toFloat(),
+            $this->log->usableEconomies(),
         );
 
         if (count($values) < 4) {
@@ -105,11 +106,11 @@ final class DataQualityAnalyzer
 
         $outliers = [];
 
-        foreach ($this->log->usableEfficiencies() as $efficiency) {
-            $modifiedZ = 0.6745 * (($efficiency->toFloat() - $median) / $mad);
+        foreach ($this->log->usableEconomies() as $economy) {
+            $modifiedZ = 0.6745 * (($economy->toFloat() - $median) / $mad);
 
             if (abs($modifiedZ) > $threshold) {
-                $outliers[] = $efficiency;
+                $outliers[] = $economy;
             }
         }
 
@@ -119,7 +120,7 @@ final class DataQualityAnalyzer
     /**
      * @return array<int, DataQualityIssue>
      */
-    private function inspect(FuelPurchase $purchase, int $index): array
+    private function inspect(EnergyPurchase $purchase, int $index): array
     {
         $issues = [];
 
@@ -143,11 +144,11 @@ final class DataQualityAnalyzer
             );
         }
 
-        if (! $purchase->volume->isPositive()) {
+        if (! $purchase->energy->isPositive()) {
             $issues[] = new DataQualityIssue(
-                DataQualityIssueType::NonPositiveVolume,
+                DataQualityIssueType::NonPositiveEnergy,
                 Severity::Error,
-                'The fuelled volume is zero or negative.',
+                'The replenished energy is zero or negative.',
                 $index,
                 $purchase->reference,
             );
@@ -163,13 +164,13 @@ final class DataQualityAnalyzer
     {
         $issues = [];
 
-        foreach ($this->outlierEfficiencies() as $efficiency) {
+        foreach ($this->outlierEconomies() as $economy) {
             $issues[] = new DataQualityIssue(
                 DataQualityIssueType::StatisticalOutlier,
                 Severity::Warning,
                 sprintf(
-                    'The efficiency reading %s looks like an outlier against the rest of the log.',
-                    $efficiency->format(2),
+                    'The economy reading %s looks like an outlier against the rest of the log.',
+                    $economy->format(2),
                 ),
             );
         }

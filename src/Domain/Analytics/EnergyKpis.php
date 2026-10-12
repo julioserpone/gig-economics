@@ -8,25 +8,30 @@ use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use GigEconomics\Domain\Money\Money;
 use GigEconomics\Domain\Shared\Distance;
-use GigEconomics\Domain\Shared\FuelEfficiency;
-use GigEconomics\Domain\Shared\FuelVolume;
+use GigEconomics\Domain\Shared\EnergyEconomy;
+use GigEconomics\Domain\Shared\EnergyQuantity;
 use JsonSerializable;
 
 /**
- * Headline fuel KPIs, equivalent to the workbook's DASHBOARD block.
+ * Headline energy KPIs for a whole log.
+ *
+ * The same object describes a combustion fleet and an electric one; the energy
+ * unit carried by {@see EnergyQuantity} says which, and `isElectric()` offers a
+ * quick branch for dashboards.
  */
-final class FuelKpis implements JsonSerializable
+final class EnergyKpis implements JsonSerializable
 {
     public function __construct(
         public readonly int $purchaseCount,
-        public readonly FuelVolume $totalVolume,
+        public readonly EnergyQuantity $totalEnergy,
         public readonly Money $totalSpend,
         public readonly Money $totalSubtotal,
-        public readonly BigDecimal $weightedPricePerGallon,
-        public readonly ?FuelEfficiency $averageEfficiency,
+        public readonly BigDecimal $weightedPricePerUnit,
+        public readonly ?EnergyEconomy $averageEconomy,
         public readonly int $vendorCount,
-        public readonly int $validEfficiencyCount,
+        public readonly int $validEconomyCount,
         public readonly Distance $totalDistance,
+        public readonly bool $isElectric = false,
     ) {}
 
     /**
@@ -37,6 +42,17 @@ final class FuelKpis implements JsonSerializable
         return $this->totalSpend->minus($this->totalSubtotal);
     }
 
+    /**
+     * Whether every purchase in the log replenished an electric vehicle.
+     */
+    public function isElectric(): bool
+    {
+        return $this->isElectric;
+    }
+
+    /**
+     * Spend per kilometre driven.
+     */
     public function spendPerKilometre(int $scale = 6): ?BigDecimal
     {
         if (! $this->totalDistance->isPositive()) {
@@ -57,14 +73,16 @@ final class FuelKpis implements JsonSerializable
     {
         return [
             'purchase_count' => $this->purchaseCount,
-            'total_volume' => (string) $this->totalVolume,
+            'total_energy' => (string) $this->totalEnergy,
+            'energy_unit' => $this->totalEnergy->unit->value,
+            'is_electric' => $this->isElectric,
             'total_spend' => (string) $this->totalSpend,
             'total_subtotal' => (string) $this->totalSubtotal,
             'total_tax' => (string) $this->totalTax(),
-            'weighted_price_per_gallon' => (string) $this->weightedPricePerGallon,
-            'average_efficiency' => $this->averageEfficiency === null ? null : (string) $this->averageEfficiency,
+            'weighted_price_per_unit' => (string) $this->weightedPricePerUnit,
+            'average_economy' => $this->averageEconomy === null ? null : (string) $this->averageEconomy,
             'vendor_count' => $this->vendorCount,
-            'valid_efficiency_count' => $this->validEfficiencyCount,
+            'valid_economy_count' => $this->validEconomyCount,
             'total_distance' => (string) $this->totalDistance,
         ];
     }

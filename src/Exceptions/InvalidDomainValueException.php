@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 /**
  * Thrown when a value would break a domain invariant (negative distance,
- * negative fuel volume, division by zero, invalid rate, etc.).
+ * negative energy amount, division by zero, invalid rate, etc.).
  */
 final class InvalidDomainValueException extends InvalidArgumentException
 {
